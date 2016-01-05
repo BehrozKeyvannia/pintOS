@@ -4,7 +4,6 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include <stdbool.h>
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -91,22 +90,8 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    /* Shared between thread.c and synch.c.
-       Used in ready and sleep lists */
+    /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
-    /* Used for timer sleep */
-    int64_t ticks;
-
-    /* Used for priority scheduling */
-    int init_priority;
-    struct lock *wait_on_lock;
-    struct list donations;
-    struct list_elem donation_elem;
-
-    /* Used for FreeBSD scheduling */
-    int nice;
-    int recent_cpu;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -152,25 +137,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
-/* Added functions */
-bool cmp_ticks (const struct list_elem *a,
-		const struct list_elem *b,
-		void *aux UNUSED);
-bool cmp_priority (const struct list_elem *a,
-		   const struct list_elem *b,
-		   void *aux UNUSED);
-void test_max_priority (void);
-
-void mlfqs_priority (struct thread *t);
-void mlfqs_recent_cpu (struct thread *t);
-void mlfqs_load_avg (void);
-void mlfqs_increment (void);
-
-void mlfqs_recalc (void);
-
-void donate_priority (void);
-void remove_with_lock (struct lock *lock);
-void refresh_priority (void);
 
 #endif /* threads/thread.h */
