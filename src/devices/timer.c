@@ -30,6 +30,8 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+static void countdownTick (struct thread *t, void *aux);
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -86,14 +88,60 @@ timer_elapsed (int64_t then)
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
+
+/* CHANGED */
+/*
+   instead of using busy wait method on calculating sleep time, 
+   we implement everything from the HINT section in the lab document.
+   1. save ticks value to a global var which added into thread struct
+      --> sleepTick
+   2. block the thread, this required:
+      --> interrupt to be disabled
+   3. enabled the interrupt when thread is unblocked
+
+   nb:
+   inside init.c, timer initiation (timer_init) is called in order for
+   Pintos to be able to use timer function. And for every iteration of
+   clock time, Pintos calls the timer interrupt function inside
+   timer_interrupt(). Thus, with a sleepTick now accessible for every 
+   threads, in each iteration of timer_interrupt(), this interrupt routine
+   should decrement the sleepTick for each threads until it reaches zero. 
+   Then unblock the thread.
+*/
 void
 timer_sleep (int64_t ticks) 
 {
+  /* old code */
+  /*
   int64_t start = timer_ticks ();
-
   ASSERT (intr_get_level () == INTR_ON);
   while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+   thread_yield ();
+  */
+
+  /* update on how long thread will sleep */
+  if (ticks > 0)
+  {
+    /* save the ticks, nb: how long thread will sleep */
+    thread_current()->sleepTick = ticks;
+
+    /* exit on error if interrupt is enabled */
+    ASSERT (intr_get_level() == INTR_ON);
+
+    /* disable the interrupt */
+    enum intr_level previousState = intr_disable();
+
+    /* block the thread */
+    thread_block();
+
+    /* enable the thread again */
+    intr_set_level (previousState);
+  }
+  /* if the ticks value is zero or less than zero, let the
+     thread skip timer_sleep() function */
+  else
+    return;
+    
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +220,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  /* for every clock tick, iterate each threads and let threads 
+     execute a countdownTick routine to decrement their sleepTick */
+  thread_foreach(countdownTick, 0);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -243,4 +295,25 @@ real_time_delay (int64_t num, int32_t denom)
      the possibility of overflow. */
   ASSERT (denom % 1000 == 0);
   busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000)); 
+}
+
+/* added routine to decrement the thread's sleepTick */
+static void countdownTick (struct thread *t, void *aux)
+{
+  /* only executed if thread's is blocked by timer_sleep() */
+  if (t->status == THREAD_BLOCKED)
+  {
+    /* do the routine until sleepTick reaches 0 */
+    if (t->sleepTick > 0)
+    {
+      /* decrement the sleepTick */
+      t->sleepTick--;
+
+      /* if the sleepTick reaches 0, unblock the thread obviously */
+      if (t->sleepTick == 0)
+      {
+        thread_unblock(t);
+      }
+    }
+  }
 }
